@@ -1,15 +1,16 @@
 """
-app_vaultguard.py
-VaultGuard — Alternate FinTech Secure App (for CY4053 Assignment 2)
-Refreshed UI theme, text, and minor cosmetics to make this an independent submission.
-Author: For Academic Submission (Independent Version)
+app_vaultguard_improved.py
+VaultGuard — Improved UI and accessibility for CY4053 Assignment
+This file keeps the original app logic but provides a more accessible color theme,
+contrast-safe cards, a theme toggle, and a few small interactive improvements
+(loading spinners, download decrypted data, image preview on upload).
+Author: Independent submission — updated for better contrast and interactivity
 """
 
 import streamlit as st
 import sqlite3
 import os
 import bcrypt
-import re
 import pandas as pd
 import random
 import string
@@ -25,90 +26,39 @@ KEY_FILE = "vaultguard_secret.key"
 ALLOWED_FILES = {"png", "jpg", "jpeg", "pdf", "csv", "txt"}
 
 # -------------------------------
-# Fresh Light Theme CSS (cosmetic changes)
+# Themes (contrast-safe)
 # -------------------------------
-def set_fresh_light_theme():
-    st.markdown(
-        """
+def set_theme(theme: str = "light"):
+    # Two safe themes: "light" (default) and "vivid" (accented but readable)
+    if theme == "vivid":
+        css = """
         <style>
-        /* App background and typography */
-        .stApp {
-            background: linear-gradient(180deg, #ffffff 0%, #f0fbff 100%);
-            font-family: 'Inter', system-ui, sans-serif;
-            color: #1b2b3a;
-            font-size: 15px;
-        }
-
-        /* Header card */
-        .vg-header {
-            text-align: center;
-            padding: 14px 0;
-            background: linear-gradient(90deg, #eaf6ff, #ffffff);
-            border-radius: 12px;
-            border: 1px solid #cfeeff;
-            margin-bottom: 22px;
-            box-shadow: 0 4px 12px rgba(16,30,39,0.03);
-        }
-
-        /* Top nav */
-        .vg-nav {
-            display: flex;
-            justify-content: center;
-            gap: 14px;
-            margin-bottom: 18px;
-        }
-        .vg-btn {
-            background-color: #ffffff;
-            border: 1px solid #bfe6ff;
-            padding: 9px 16px;
-            border-radius: 16px;
-            cursor: pointer;
-            color: #0b66a3;
-            font-weight: 600;
-            font-size: 14px;
-        }
-        .vg-btn:hover {
-            background-color: #0b66a3;
-            color: #ffffff;
-            transform: translateY(-1px);
-        }
-
-        /* Main content card */
-        .vg-card {
-            background-color: #ffffff;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 6px 18px rgba(12,30,60,0.04);
-            border: 1px solid #eef9ff;
-        }
-
-        /* Headings */
-        h1, h2, h3 {
-            color: #08324b;
-            letter-spacing: -0.2px;
-        }
-
-        /* Small helpers */
-        .small-muted {
-            color: #496274;
-            font-size: 13px;
-        }
-
-        /* Styled code blocks */
-        .stCodeBlock pre {
-            background: #f7fbff !important;
-            border-left: 4px solid #9fd6ff;
-            padding: 10px !important;
-            border-radius: 6px;
-        }
+        .stApp { background: linear-gradient(180deg,#f7fbff 0%, #e8f6ff 100%); color: #072033; font-family: Inter, sans-serif; }
+        .vg-header { background: linear-gradient(90deg,#fffbe6,#e8f6ff); border: 1px solid #cfe8ff; border-radius:12px; padding:14px; text-align:center; }
+        .vg-card { background:#ffffff; color:#072033; border-radius:12px; padding:16px; border:1px solid #eef8ff; box-shadow:0 8px 20px rgba(10,30,50,0.04); }
+        .vg-btn { background: linear-gradient(90deg,#0b7bbf,#0a94d1); color:white; padding:8px 14px; border-radius:10px; border:none; }
+        .vg-btn:active { transform: translateY(1px); }
+        .stCodeBlock pre { background:#f3f8ff !important; color:#03212a !important; border-left:4px solid #9fd6ff; padding:10px !important; border-radius:6px; }
+        .small-muted { color:#475d6a; }
         </style>
-        """,
-        unsafe_allow_html=True
-    )
+        """
+    else:
+        css = """
+        <style>
+        .stApp { background: linear-gradient(180deg,#ffffff 0%, #f6fbff 100%); color: #0b2533; font-family: Inter, sans-serif; }
+        .vg-header { background: #ffffff; border: 1px solid #e8f3f9; border-radius:12px; padding:12px; text-align:center; }
+        .vg-card { background:#ffffff; color:#0b2533; border-radius:12px; padding:16px; border:1px solid #f1f7fb; box-shadow:0 6px 18px rgba(12,30,60,0.03); }
+        .vg-btn { background: #0b66a3; color:white; padding:8px 14px; border-radius:10px; border:none; }
+        .stCodeBlock pre { background:#fbfeff !important; color:#001b24 !important; border-left:4px solid #bfe6ff; padding:10px !important; border-radius:6px; }
+        .small-muted { color:#4a6b7a; }
+        </style>
+        """
+    st.markdown(css, unsafe_allow_html=True)
 
 # -------------------------------
-# Crypto (same behavior)
+# Crypto
 # -------------------------------
+
 def ensure_key():
     if os.path.exists(KEY_FILE):
         with open(KEY_FILE, "rb") as f:
@@ -119,24 +69,27 @@ def ensure_key():
     return key
 
 fernet = None
+
 def init_crypto():
     global fernet
     key = ensure_key()
     fernet = Fernet(key)
 
-def encrypt_data(text):
+def encrypt_data(text: str) -> bytes:
     return fernet.encrypt(text.encode())
 
-def decrypt_data(blob):
+def decrypt_data(blob: bytes) -> str:
     return fernet.decrypt(blob).decode()
 
 # -------------------------------
-# DB (unchanged schema, different file name)
+# Database
 # -------------------------------
+
 def get_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def init_db():
     conn = get_db()
@@ -184,26 +137,30 @@ def init_db():
     conn.close()
 
 # -------------------------------
-# Helper Functions (same safety)
+# Helpers
 # -------------------------------
-def hash_pw(p):
+
+def hash_pw(p: str) -> bytes:
     return bcrypt.hashpw(p.encode(), bcrypt.gensalt())
 
-def verify_pw(p, h):
+
+def verify_pw(p: str, h: bytes) -> bool:
     try:
         return bcrypt.checkpw(p.encode(), h)
     except Exception:
         return False
 
-def sanitize(s):
+
+def sanitize(s: str) -> str:
     s = s.strip()
     if len(s) > 1000:
         s = s[:1000]
-    # basic blacklist to avoid obvious unsafe SQL-like tokens
     lowered = s.lower()
+    # basic blacklist for obvious SQL-like tokens
     if any(x in lowered for x in ["--", "drop ", "delete ", "insert ", " or ", "=", " and "]):
         raise ValueError("Input contains disallowed tokens.")
     return s
+
 
 def log_action(uid, action, detail=None):
     try:
@@ -214,13 +171,13 @@ def log_action(uid, action, detail=None):
         conn.commit()
         conn.close()
     except Exception:
-        # silent fail for logging to avoid breaking UX
         pass
 
 # -------------------------------
-# User Operations
+# User ops
 # -------------------------------
-def register_user(username, email, password):
+
+def register_user(username: str, email: str, password: str):
     try:
         username = sanitize(username)
         email = sanitize(email)
@@ -240,13 +197,15 @@ def register_user(username, email, password):
     finally:
         conn.close()
 
-def get_user(username):
+
+def get_user(username: str):
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE username=?", (username,))
     r = c.fetchone()
     conn.close()
     return r
+
 
 def get_user_by_id(uid):
     conn = get_db()
@@ -257,8 +216,9 @@ def get_user_by_id(uid):
     return r
 
 # -------------------------------
-# Wallet & Transactions
+# Wallets & transactions
 # -------------------------------
+
 def create_wallet(uid, name, data):
     try:
         name = sanitize(name)
@@ -273,7 +233,8 @@ def create_wallet(uid, name, data):
     conn.commit()
     conn.close()
     log_action(uid, "wallet_created", name)
-    return True, "Wallet saved 🔒"
+    return True, "Vault saved 🔒"
+
 
 def get_wallets(uid):
     conn = get_db()
@@ -282,6 +243,7 @@ def get_wallets(uid):
     rows = c.fetchall()
     conn.close()
     return rows
+
 
 def create_transaction(wallet_id, tx_number):
     if not tx_number.isdigit():
@@ -297,6 +259,7 @@ def create_transaction(wallet_id, tx_number):
     conn.close()
     return True, f"Transaction {tx_ref} recorded."
 
+
 def get_transactions(wallet_id):
     conn = get_db()
     c = conn.cursor()
@@ -306,8 +269,9 @@ def get_transactions(wallet_id):
     return rows
 
 # -------------------------------
-# File Upload validation
+# File upload
 # -------------------------------
+
 def validate_file(uploaded):
     ext = uploaded.name.split(".")[-1].lower()
     if ext not in ALLOWED_FILES:
@@ -317,17 +281,19 @@ def validate_file(uploaded):
     return True, "File accepted ✅"
 
 # -------------------------------
-# Pages (UI copy updated)
+# Pages (improved UI interactions)
 # -------------------------------
+
 def page_home():
     st.markdown("<div class='vg-card'><h2>Welcome to VaultGuard 🔐</h2>"
-                "<p class='small-muted'>A small demo of secure storage, encrypted wallets and safe transaction records.</p></div>",
+                "<p class='small-muted'>Secure storage demo — encryption, simple wallets & transactions.</p></div>",
                 unsafe_allow_html=True)
+
 
 def page_register():
     st.subheader("Create your VaultGuard account")
     with st.form("reg_form"):
-        username = st.text_input("Choose a username")
+        username = st.text_input("Choose a username", help="Pick a short memorable name")
         email = st.text_input("Email address")
         pw = st.text_input("Password", type="password")
         c_pw = st.text_input("Confirm password", type="password")
@@ -336,11 +302,14 @@ def page_register():
         if pw != c_pw:
             st.warning("Passwords do not match. Please try again.")
         else:
-            ok, msg = register_user(username, email, pw)
+            with st.spinner("Creating account..."):
+                ok, msg = register_user(username, email, pw)
             if ok:
                 st.success(msg)
+                st.balloons()
             else:
                 st.error(msg)
+
 
 def page_login():
     st.subheader("Sign in to VaultGuard")
@@ -358,14 +327,17 @@ def page_login():
         else:
             st.error("Invalid credentials. Check username/password and try again.")
 
+
 def page_wallets():
-    if not logged_in(): return
+    if not logged_in():
+        return
     st.subheader("Your Vaults")
     with st.form("add_wallet"):
-        wname = st.text_input("Vault name")
-        wdata = st.text_area("Secret data (will be encrypted)")
+        wname = st.text_input("Vault name", help="A short name to identify the secret")
+        wdata = st.text_area("Secret data (will be encrypted)", help="Any sensitive string — it is encrypted before storage")
         if st.form_submit_button("Add Vault"):
-            ok, msg = create_wallet(st.session_state["user_id"], wname, wdata)
+            with st.spinner("Encrypting & saving..."):
+                ok, msg = create_wallet(st.session_state["user_id"], wname, wdata)
             if ok:
                 st.success(msg)
             else:
@@ -373,32 +345,45 @@ def page_wallets():
     st.divider()
     wallets = get_wallets(st.session_state["user_id"])
     for w in wallets:
-        st.markdown(f"**{w['name']}** — created {w['created_at']}")
-        if st.button(f"Show Encrypted #{w['id']}", key=f"view_{w['id']}"):
+        st.markdown(f"<div class='vg-card'><strong>{w['name']}</strong> — created {w['created_at']}</div>", unsafe_allow_html=True)
+        cols = st.columns([1,1,1])
+        if cols[0].button("Show Encrypted", key=f"view_{w['id']}"):
             st.code(w['data'])
-        if st.button(f"Decrypt Vault #{w['id']}", key=f"dec_{w['id']}"):
+        if cols[1].button("Decrypt & Download", key=f"dec_{w['id']}"):
             try:
-                st.code(decrypt_data(w['data']))
+                with st.spinner("Decrypting..."):
+                    # small progress for UX
+                    p = st.progress(0)
+                    for i in range(0,101,25):
+                        p.progress(i)
+                    dec = decrypt_data(w['data'])
+                st.success("Decrypted — ready")
+                st.code(dec)
+                st.download_button("Download decrypted text", data=dec, file_name=f"vault_{w['id']}.txt")
             except Exception:
                 st.error("Unable to decrypt — data may be corrupted.")
+        if cols[2].button("Transactions", key=f"tx_{w['id']}"):
+            txs = get_transactions(w['id'])
+            if txs:
+                with st.expander("Transactions list", expanded=True):
+                    df = pd.DataFrame(txs, columns=["Reference","Number","Created At"])
+                    st.dataframe(df, use_container_width=True)
+            else:
+                st.info("No transactions recorded.")
         with st.form(f"txform_{w['id']}", clear_on_submit=True):
-            num = st.text_input("Transaction number (digits only)", key=f"txn_{w['id']}")
-            if st.form_submit_button("Record Transaction"):
-                ok, msg = create_transaction(w["id"], num)
+            num = st.text_input("New transaction number (digits only)", key=f"txn_{w['id']}")
+            if st.form_submit_button("Record"):
+                with st.spinner("Saving transaction..."):
+                    ok, msg = create_transaction(w["id"], num)
                 if ok:
                     st.success(msg)
                 else:
                     st.error(msg)
-        if st.button(f"View Transactions #{w['id']}", key=f"showtx_{w['id']}"):
-            txs = get_transactions(w["id"])
-            if txs:
-                df = pd.DataFrame(txs, columns=["Reference", "Number", "Created At"])
-                st.dataframe(df, use_container_width=True)
-            else:
-                st.info("No transactions yet.")
+
 
 def page_upload():
-    if not logged_in(): return
+    if not logged_in():
+        return
     st.subheader("Upload a file to VaultGuard")
     st.markdown("<div class='small-muted'>Allowed: png, jpg, jpeg, pdf, csv, txt — max 5MB</div>", unsafe_allow_html=True)
     f = st.file_uploader("Choose file", type=list(ALLOWED_FILES))
@@ -406,11 +391,16 @@ def page_upload():
         ok, msg = validate_file(f)
         if ok:
             st.success(msg)
+            # quick preview for images
+            if f.type.startswith("image/"):
+                st.image(f, use_column_width=True)
         else:
             st.error(msg)
 
+
 def page_logs():
-    if not logged_in(): return
+    if not logged_in():
+        return
     st.subheader("Activity — Your recent actions")
     conn = get_db()
     c = conn.cursor()
@@ -418,7 +408,7 @@ def page_logs():
     rows = c.fetchall()
     conn.close()
     if rows:
-        df = pd.DataFrame(rows, columns=["Action", "Detail", "Timestamp"])
+        df = pd.DataFrame(rows, columns=["Action","Detail","Timestamp"])
         st.dataframe(df, use_container_width=True)
         buf = BytesIO()
         df.to_excel(buf, index=False, sheet_name="activity")
@@ -428,13 +418,15 @@ def page_logs():
         st.info("No actions recorded yet.")
 
 # -------------------------------
-# Utility
+# Utilities
 # -------------------------------
+
 def logged_in():
     if "user_id" not in st.session_state:
         st.warning("Please sign in to continue.")
         return False
     return True
+
 
 def logout():
     if "user_id" in st.session_state:
@@ -444,10 +436,16 @@ def logout():
     st.rerun()
 
 # -------------------------------
-# Main App
+# Main
 # -------------------------------
+
 def main():
-    set_fresh_light_theme()
+    # theme selector at the top — keeps UI accessible
+    st.set_page_config(page_title="VaultGuard — Secure Demo", layout="wide")
+
+    chosen_theme = st.sidebar.radio("Theme", ["light","vivid"], index=0, help="Choose a comfortable color theme")
+    set_theme(chosen_theme)
+
     init_db()
     init_crypto()
 
@@ -460,7 +458,7 @@ def main():
     for i, p in enumerate(pages):
         if cols[i].button(p, key=f"pgbtn_{i}"):
             st.session_state["active_page"] = p
-            st.rerun()
+            st.experimental_rerun()
 
     if active_page == "🏠 Home":
         page_home()
